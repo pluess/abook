@@ -1,0 +1,231 @@
+<?php
+
+/**
+ * Implements hook_menu().
+ */
+function abook_menu() {
+	$items = array();
+
+	$items['abook'] = array(
+    'title' => 'Address book',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('abook_form'),
+    'access callback' => TRUE,
+	);
+	
+  $items['abook/autocomplete'] = array(
+    'title' => 'Autocomplete for perssons',
+    'page callback' => 'abook_autocomplete',
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK
+  );	
+	
+	return $items;
+}
+
+/**
+ * Builds the form.
+ * 
+ * @param $form
+ * @param $form_state
+ */
+function abook_form($form, &$form_state) {
+	
+  $form['search'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Search'),
+    '#collapsible' => FALSE,
+    '#collapsed' => FALSE,
+    '#tree' => TRUE,
+  );
+  
+	$form['search']['keyword'] = array(
+	  '#type' => 'textfield',
+	  '#title' => t('Address'),
+	  '#size' => 60,
+	  '#maxlength' => 128,
+	  '#description' => t('Enter id, first and/or lastname to find an address.'),
+	  '#autocomplete_path' => 'abook/autocomplete',
+	);
+	  
+  $form['search']['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Load'),
+    '#submit' => array('abook_load'),
+    '#ajax' => array(
+      'callback' => 'abook_ajax_callback',
+      'wrapper' => 'address-replace',
+    ),
+  );
+  
+	$form['address'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Adress'),
+    '#collapsible' => FALSE,
+    '#collapsed' => FALSE,
+    '#prefix' => '<div id="address-replace">',
+    '#suffix' => '</div>',
+    '#tree' => TRUE,
+  );
+  
+  $form['address']['pid'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Id'),
+    '#size' => 4,
+    '#maxlength' => 4,
+    '#attributes' => array('readonly' => 'readonly')
+  );
+  
+  $form['address']['firstname'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Firstname'),
+    '#size' => 60,
+    '#maxlength' => 128,
+  );
+  
+  $form['address']['lastname'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Lastname'),
+    '#size' => 60,
+    '#maxlength' => 128,
+  );
+  
+  $form['address']['male'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Male'),
+  );
+  
+  $form['address']['dayofbirth'] = array(
+    '#type' => 'date',
+    '#title' => t('Day of Birth'),
+  );
+	  
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Save'),
+    '#submit' => array('abook_submit'),
+    '#ajax' => array(
+      'callback' => 'abook_ajax_callback',
+      'wrapper' => 'address-replace',
+    ),
+  );
+  
+  $form['new'] = array(
+    '#type' => 'submit',
+    '#value' => t('New'),
+    '#submit' => array('abook_new'),
+    '#ajax' => array(
+      'callback' => 'abook_ajax_callback',
+      'wrapper' => 'address-replace',
+    ),
+  );
+  
+  if (isset($form_state['person'])) {
+  	list($year, $month, $day) = explode('-', $form_state['person']->dayofbirth);
+	  $form_state['input']['address']['pid'] = (string)$form_state['person']->pid;
+    $form_state['input']['address']['firstname'] = (string)$form_state['person']->firstname;
+    $form_state['input']['address']['lastname'] = (string)$form_state['person']->lastname;
+    $form_state['input']['address']['male'] = (string)$form_state['person']->male;
+    $form_state['input']['address']['dayofbirth']['year'] = $year;
+    $form_state['input']['address']['dayofbirth']['month'] = _abook_strip_zero($month);
+    $form_state['input']['address']['dayofbirth']['day'] = _abook_strip_zero($day);
+  }
+  
+  return $form;
+}
+
+function abook_submit($form, &$form_state) {
+	$person = _abook_save_or_update($form, $form_state);
+  $form_state['person'] = (object) $person;
+  $form_state['rebuild'] = TRUE;
+}
+
+function abook_new($form, &$form_state) { 
+  unset($form_state['person']);
+  unset($form_state['input']['address']);
+  $form_state['rebuild'] = TRUE;
+}
+
+function abook_load($form, &$form_state) {
+	$person = null;
+	if (isset($form_state['values']['search']['keyword'])) {
+		list($first, $last) = explode(', ', $form_state['values']['search']['keyword']);
+		$query = db_select('person', 'p')
+      ->condition('firstname', db_like($first), 'LIKE')
+      ->fields('p');
+    if (isset($last)) {
+    	$query->condition('lastname', db_like($last), 'LIKE');
+    }
+    $s = $query->__toString();
+		$person = $query->execute()->fetch();
+	}
+	
+	if (isset($person)) {
+	  $form_state['person'] = $person;
+	  $form_state['rebuild'] = TRUE;
+	}
+}
+
+function abook_ajax_callback($form, &$form_state) {
+  return $form['address'];
+}
+
+function abook_autocomplete($key) {
+	$matches = array();
+	$key = check_plain($key);
+	if (is_numeric($key)) {
+    $query = db_select('person', 'p')
+      ->condition('pid', $key)
+      ->fields('p');
+    $s = $query->__toString();
+    $person = $query->execute()->fetch();
+    $matches[_abook_person_tostring_names($person)] = _abook_person_tostring_full($person);
+	}
+	else {
+    $query = db_select('person', 'p')
+      ->condition(db_or()->condition('firstname', db_like($key).'%', 'LIKE')->condition('lastname', "$key%", 'LIKE'))
+      ->fields('p');
+    $s = $query->__toString();
+		$result = $query->execute();
+		foreach($result as $person) {
+			$matches[_abook_person_tostring_names($person)] = _abook_person_tostring_full($person);
+		}
+	}
+	
+  drupal_json_output($matches);
+  
+}
+
+function _abook_save_or_update($form, &$form_state) {
+  // persist
+  $address = NULL;
+	if (isset($form_state['values']['address']['firstname']) && strlen($form_state['values']['address']['firstname'])>0) {
+    foreach ($form_state['values']['address'] as $key => $value) {
+      if (is_array($value)) {
+        $address[strtolower($key)] = $value['year'].'-'.$value['month'].'-'.$value['day'];
+      }
+      else {
+        if (strlen($value)>0) 
+          $address[$key] = $value;
+      }
+    }
+    $empty = is_null($address['pid']);
+    drupal_write_record('person', $address, $empty ? array() : 'pid');
+  }
+  
+  return $address;
+	
+}
+
+function _abook_person_tostring_full($person) {
+	return $person->pid . ', ' . $person->firstname . ', ' . $person->lastname;
+}
+
+function _abook_person_tostring_names($person) {
+  return $person->firstname . ', ' . $person->lastname;
+}
+
+function _abook_strip_zero($string) {
+	$val = (integer)$string;
+	return (string)$val;
+}

@@ -1,0 +1,3 @@
+name = abook
+description = An address book to demostrate ajax 
+core = 7.x

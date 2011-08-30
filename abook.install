@@ -1,0 +1,41 @@
+<?php
+
+function abook_schema() {
+
+	$schema['person'] = array(
+	  'description' => 'Stores a person',
+	  'fields' => array(
+	    'pid' => array(
+	      'description' => 'Primary key',
+        'type' => 'serial',
+		    'not null' => TRUE,
+		),
+	    'firstname' => array(
+	      'description' => 'firstname',
+	      'type' => 'varchar',
+	      'length' => '255',
+	      'not null' => TRUE,
+		),
+	    'lastname' => array(
+	      'description' => 'lastname',
+	      'type' => 'varchar',
+	      'length' => '255',
+	      'not null' => TRUE,
+		),
+	    'male' => array(
+	      'description' => 'male',
+	      'type' => 'int',
+	      'size' => 'tiny',
+	      'not null' => TRUE,
+		),
+	    'dayofbirth' => array(
+	      'description' => 'dayofbirth',
+	      'type' => 'date',
+	      'not null' => TRUE,
+		),
+		),
+	  'primary key' => array('pid'),
+	);
+
+	return $schema;
+}
