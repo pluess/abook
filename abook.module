@@ -1,6 +1,12 @@
 <?php
 
 /**
+ * @file
+ * This module is meant to be an example for AJAX coding using the 
+ * built in ajax features of the drupal Forms API. 
+ */
+
+/**
  * Implements hook_menu().
  */
 function abook_menu() {
